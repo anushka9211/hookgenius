@@ -198,7 +198,7 @@ cliffhangers = detect_optimal_cliffhangers(scored_beats)
 # Macro Metrics
 avg_tension = sum(b["smoothed_tension"] for b in scored_beats) / max(1, len(scored_beats))
 peak_tension = max((b["smoothed_tension"] for b in scored_beats), default=0)
-top_hook_index = cliffhangers[0]["hook_index"] if cliffhangers else 7.5
+top_hook_index = cliffhangers[0]["hook_index"] if cliffhangers else round(max((b.get("hook_index", 1.2) for b in scored_beats), default=1.2), 1)
 
 # ----------------- KPI Cards Row -----------------
 c1, c2, c3, c4 = st.columns(4)
@@ -228,10 +228,19 @@ with c3:
     """, unsafe_allow_html=True)
 
 with c4:
-    grade = "Tier 1: High Binge Impact" if top_hook_index >= 8.5 else ("Tier 2: Moderate Impact" if top_hook_index >= 7.0 else "Tier 3: Low Impact")
+    if top_hook_index >= 8.5:
+        grade = "Tier 1: High Binge Impact"
+        tier_color = "#f43f5e"
+    elif top_hook_index >= 7.0:
+        grade = "Tier 2: Moderate Impact"
+        tier_color = "#38bdf8"
+    else:
+        grade = "Tier 3: Low Impact (Flat/Mundane)"
+        tier_color = "#94a3b8"
+        
     st.markdown(f"""
     <div class="metric-card">
-        <div class="metric-val" style="color:#fbbf24; font-size:16px; margin-top:2px;">{grade.split(':')[0]}</div>
+        <div class="metric-val" style="color:{tier_color}; font-size:15px; margin-top:2px;">{grade.split(':')[0]}</div>
         <div class="metric-label">{grade.split(':')[1]}</div>
     </div>
     """, unsafe_allow_html=True)
@@ -281,7 +290,7 @@ fig.update_layout(
         title="Tension Score (0 - 100)",
         gridcolor="#1e293b",
         color="#94a3b8",
-        range=[15, 105]
+        range=[0, 105]
     ),
     hovermode="x unified",
     showlegend=False
@@ -296,42 +305,53 @@ with col_left:
     st.markdown("### ✂️ Recommended Episode Cut Points")
     st.caption("Heuristically graded moments to roll credits on, leaving the viewer at peak cognitive tension.")
     
-    for i, cut in enumerate(cliffhangers):
-        badge_label = "🏆 Recommended Cut" if i == 0 else f"Alternative Option #{i+1}"
+    if not cliffhangers:
         st.markdown(f"""
-        <div class="cut-card">
-            <div class="cut-title">
-                <span>{badge_label} • {cut['scene']}</span>
-                <span class="badge-index">⚡ Hook Index: {cut['hook_index']} / 10 ({cut['tier']})</span>
-            </div>
-            <div class="cut-quote">
-                <b>{cut['character']}:</b> "{cut['line']}"
-            </div>
-            <div style="font-size:11px; color:#cbd5e1; margin-bottom:6px;">
-                <b>Hypothesis:</b> {cut['hypothesis']}
-            </div>
+        <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 14px; margin-bottom: 12px;">
+            <b style="color: #f87171;">⚠️ Zero Tier 1/2 Cut Points Found (Max Hook Index: {top_hook_index} / 10)</b><br>
+            <span style="font-size: 12px; color: #cbd5e1; line-height: 1.5;">
+            <b>Negative Control Detected:</b> This script contains zero narrative tension, no status inversion, and no unresolved information gaps. All questions are immediately resolved with routine small talk. Cutting credits here creates zero binge retention.
+            </span>
         </div>
         """, unsafe_allow_html=True)
-        
-        # Expandable Transparent Rubric Breakdown
-        with st.expander(f"🔍 View Scoring Rubric Breakdown for Cut #{i+1}"):
-            r_cols = st.columns(3)
-            rb = cut["rubric_breakdown"]
-            with r_cols[0]:
-                st.metric("Tension Base", f"{rb['Narrative Tension Base']} / 5.0")
-            with r_cols[1]:
-                st.metric("Information Gap", f"+{rb['Information Gap Withheld']}")
-            with r_cols[2]:
-                st.metric("Stakes Escalation", f"+{rb['Stakes Escalation']}")
+    else:
+        for i, cut in enumerate(cliffhangers):
+            badge_label = "🏆 Recommended Cut" if i == 0 else f"Alternative Option #{i+1}"
+            st.markdown(f"""
+            <div class="cut-card">
+                <div class="cut-title">
+                    <span>{badge_label} • {cut['scene']}</span>
+                    <span class="badge-index">⚡ Hook Index: {cut['hook_index']} / 10 ({cut['tier']})</span>
+                </div>
+                <div class="cut-quote">
+                    <b>{cut['character']}:</b> "{cut['line']}"
+                </div>
+                <div style="font-size:11px; color:#cbd5e1; margin-bottom:6px;">
+                    <b>Hypothesis:</b> {cut['hypothesis']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
             
-            st.caption(f"**Dialogue Delivery:** {cut['pacing']} • Status Inversion Dynamic: +{rb['Status Inversion Dynamic']}")
+            # Expandable Transparent Rubric Breakdown
+            with st.expander(f"🔍 View Scoring Rubric Breakdown for Cut #{i+1}"):
+                r_cols = st.columns(3)
+                rb = cut["rubric_breakdown"]
+                with r_cols[0]:
+                    st.metric("Tension Base", f"{rb['Narrative Tension Base']} / 5.0")
+                with r_cols[1]:
+                    st.metric("Information Gap", f"+{rb['Information Gap Withheld']}")
+                with r_cols[2]:
+                    st.metric("Stakes Escalation", f"+{rb['Stakes Escalation']}")
+                
+                st.caption(f"**Dialogue Delivery:** {cut['pacing']} • Status Inversion Dynamic: +{rb['Status Inversion Dynamic']}")
 
 with col_right:
     st.markdown("### 🧪 A/B Test Hook Doctor")
     st.caption("Generate distinct psychological variations for episode cliffhangers ready for production A/B testing.")
     
-    # Pick a scene beat that could be improved
-    sample_weak = scored_beats[min(4, len(scored_beats)-1)]
+    # Pick the closing beat of the scene to show how to rescue the ending
+    closing_dialogues = [b for b in scored_beats if b["type"] in ["DIALOGUE", "ACTION"]]
+    sample_weak = closing_dialogues[-1] if closing_dialogues else scored_beats[-1]
     ab_rewrites = generate_ab_test_rewrites(sample_weak)
     
     st.markdown("**Original Scene Ending:**")

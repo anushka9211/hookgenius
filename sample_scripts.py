@@ -197,5 +197,99 @@ Pooja! We can talk outside! You don't have to ruin my family!
 POOJA
 (Cold, uncompromising)
 We had eighteen months to talk, Arjun. But last night, my private investigator sent me a recording from your hotel suite in Goa. Play tape number four, Your Honor. The part where Arjun talks about the brake failure on my father's car.
+""",
+    "The Singhania Empire Betrayal (Tanya & Arjun)": """SCENE 1: INT. SINGHANIA MANSION - STUDY - DAY
+
+TANYA (28, dressed in designer wear) throws a thick legal file onto the mahogany desk. ARJUN (30, dressed in simple cotton clothes) looks at it calmly. VIKRAM (32, arrogant) smirks from the corner of the room.
+
+TANYA
+Sign it, Arjun. You have lived off my family's scraps for three long years. Our marriage is over. The 500-crore enterprise belongs to me.
+
+ARJUN
+(Voice steady)
+Are you entirely sure about this, Tanya? Once my signature is on that paper, there is no going back.
+
+VIKRAM
+(Laughs)
+Stop stalling, you beggar! We have a press board meeting in twenty minutes to announce Tanya as the new CEO. Sign the divorce deed and take your suitcase out the back door.
+
+Arjun picks up the gold-plated pen. He doesn't read the document. He just signs it in one fluid motion and slides it across the desk.
+
+Tanya snatches it eagerly.
+
+TANYA
+Finally. Mr. Sharma!
+
+MR. SHARMA (50s, the family lawyer) steps forward. He takes the file to verify the signature. As he scans the document, his phone buzzes. He looks at an urgent email. The color completely drains from his face.
+
+MR. SHARMA
+(Trembling)
+Madam... there is a severe problem.
+
+TANYA
+What problem? He signed it. We own 100% of Singhania Industries now.
+
+MR. SHARMA
+No, madam. The original guarantor deed from 1999 just cleared the Supreme Court. The true heir to the Singhania empire... it isn't your late father.
+
+TANYA
+What nonsense are you talking about?! I am the only bloodline!
+
+Suddenly, the heavy oak doors burst open. Four armed security guards in black suits march in, completely ignoring Tanya and Vikram. They stand at attention behind Arjun.
+
+ARJUN
+(Slowly stands up, buttoning his jacket)
+Mr. Sharma is telling the truth, Tanya. My grandfather founded this company. I only married you to audit the accounts from the inside.
+
+Vikram takes a step back, terrified. Tanya drops the file.
+
+ARJUN
+And by signing that mutual divorce deed... you didn't legally separate from me. You just forfeited your 20% minority stake back to the primary shareholder.
+
+TANYA
+(Breathless, shaking)
+Primary shareholder? Who... who is the primary shareholder?
+
+ARJUN
+(Coldly)
+Me. Now get out of my house.
+
+[SCENE END]
+""",
+    "Negative Control: Office Pantry (Zero Stakes / Flatline Test)": """SCENE 1: INT. TECH PARK OFFICE PANTRY - DAY
+
+RAHUL (25, dressed in a standard polo shirt) is stirring a cup of instant coffee. PRIYA (27, carrying a printed document) walks in.
+
+PRIYA
+Hey Rahul. Did you happen to see the stapler? I need to bind the Q3 analytics report before the weekly sync.
+
+RAHUL
+Yeah, it's right here next to the microwave.
+
+Rahul picks up the stapler and hands it to her.
+
+PRIYA
+Thanks. Did the printer jam again on the third floor?
+
+RAHUL
+No, it actually worked perfectly this time. I refilled the paper tray this morning when I got in.
+
+PRIYA
+Great, that saves me a trip down to the IT helpdesk.
+
+Priya lines up the pages of her report and staples them together with a sharp *clack*. She checks the alignment and nods, satisfied.
+
+PRIYA
+All done. Are we still on for the conference room in ten minutes?
+
+RAHUL
+Sounds good. I'll bring the projector remote so we don't have to use the keyboard.
+
+PRIYA
+Perfect. See you in there.
+
+Priya smiles casually and walks out of the pantry. Rahul takes a slow sip of his coffee and looks out the window at the parking lot.
+
+[SCENE END]
 """
 }

@@ -1,6 +1,11 @@
 """
-HookGenius Narrative Tension & Cliffhanger Analytics Engine v2.0
+HookGenius Narrative Tension & Cliffhanger Analytics Engine v2.5
 Designed for Kuku TV & Kuku FM Content Operations & Growth Engineering
+Features:
+- Regex Word-Boundary Conflict Matching (Zero substring false positives)
+- Absolute Anchored Scoring Rubric (Scores 1-3: Mundane, 4-6: Friction, 7-8: High Stakes, 9-10: Peak Inversion)
+- Turn-Taking Retort Detection with Stakes Gating
+- Native Negative Control / Flat Scene Support
 """
 
 import re
@@ -9,7 +14,7 @@ from typing import List, Dict, Any, Tuple
 import pandas as pd
 
 # High-yield dramatic conflict & revelation vocabulary for Indian OTT & Micro-Dramas
-CONFLICT_KEYWORDS = {
+RAW_CONFLICT_KEYWORDS = {
     "high_conflict": [
         "kill", "murder", "dead", "death", "die", "poison", "cyanide", "blood", "gun", 
         "destroy", "ruin", "revenge", "betray", "betrayal", "suicide", "crash", "explosion",
@@ -21,19 +26,25 @@ CONFLICT_KEYWORDS = {
         "foreclosure", "guarantor", "trust fund", "power of attorney", "deed", "shares",
         "blackstone", "singhania", "oberoi", "raichand", "beggar", "street", "billionaire",
         "get out", "out of my house", "my house", "my company", "primary shareholder",
-        "sole heir", "founder", "founded", "ceo", "audit", "kneel", "fired", "slave", "me."
+        "sole heir", "founder", "founded", "ceo", "audit", "kneel", "fired", "slave"
     ],
     "revelation_mystery": [
         "secret", "truth", "confession", "tape", "recording", "cctv", "camera", "real father",
         "real mother", "dna", "test", "fake", "faked", "impostor", "investigator", "evidence",
-        "proof", "document", "contract", "pregnant", "wife", "hospital", "alive", "who is", "who..."
+        "proof", "confidential document", "contract", "pregnant", "hospital", "alive"
     ]
+}
+
+# Compile with strict regex word boundaries to prevent substring bleed (e.g. "down" matching "own")
+COMPILED_CONFLICT_KEYWORDS = {
+    cat: [re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE) for kw in kws]
+    for cat, kws in RAW_CONFLICT_KEYWORDS.items()
 }
 
 HOOK_TRIGGERS = [
     {
         "type": "Status Inversion & Hierarchy Reversal",
-        "keywords": ["real father", "heir", "dna", "son", "mother", "sharda", "raichand", "impostor", "beggar", "primary shareholder", "out of my house", "get out", "me."],
+        "keywords": ["real father", "heir", "dna", "son", "mother", "sharda", "raichand", "impostor", "beggar", "primary shareholder", "out of my house", "get out"],
         "hypothesis": "Dismantles the power dynamic, creating a cognitive cliffhanger around the oppressor's reaction."
     },
     {
@@ -147,16 +158,15 @@ def parse_script_into_beats(script_text: str) -> List[Dict[str, Any]]:
 
 def calculate_tension_curve(beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Computes beat-by-beat tension using a rolling narrative context window,
-    dialogue velocity, and semantic stakes density.
-    Also calculates relative scene arc progression for climax localization.
+    Computes beat-by-beat tension using strict semantic stakes gating.
+    Mundane small talk remains flatlined near baseline (10-20), while dramatic
+    conflict accelerates towards climax (70-99).
     """
     scored_beats = []
-    running_tension = 35.0  # Baseline tension
+    running_tension = 15.0  # True resting baseline for human conversations
     accumulated_scene_stakes = 0.0
     current_scene_tracker = ""
 
-    # Count total beats per scene to compute relative position
     scene_beat_counts: Dict[str, int] = {}
     for b in beats:
         scene_beat_counts[b["scene"]] = scene_beat_counts.get(b["scene"], 0) + 1
@@ -164,104 +174,109 @@ def calculate_tension_curve(beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     scene_current_indices: Dict[str, int] = {}
 
     for i, b in enumerate(beats):
-        text_lower = b["text"].lower()
-        score = running_tension
-
-        # Scene progression tracking
         scene_name = b["scene"]
         scene_current_indices[scene_name] = scene_current_indices.get(scene_name, 0) + 1
         scene_progress = scene_current_indices[scene_name] / max(1, scene_beat_counts.get(scene_name, 1))
 
-        # Context Window: Reset or carry scene-level narrative momentum
         if scene_name != current_scene_tracker:
             current_scene_tracker = scene_name
-            accumulated_scene_stakes = min(20.0, accumulated_scene_stakes * 0.5)
+            accumulated_scene_stakes = 0.0
+            running_tension = 15.0
 
-        # 1. Pacing & Dialogue Staccato
         words = b["text"].split()
         word_count = len(words)
         pacing_velocity = "Moderate"
 
-        if 1 <= word_count <= 12 and b["type"] == "DIALOGUE":
-            score += 10.0
-            pacing_velocity = "High (Staccato)"
-        elif word_count > 35:
-            score -= 6.0
-            pacing_velocity = "Low (Exposition)"
+        # Regex word-boundary keyword checks
+        stakes_escalated = any(r.search(b["text"]) for r in COMPILED_CONFLICT_KEYWORDS["high_conflict"])
+        status_inversion = any(r.search(b["text"]) for r in COMPILED_CONFLICT_KEYWORDS["power_reversal"])
+        info_withheld = any(r.search(b["text"]) for r in COMPILED_CONFLICT_KEYWORDS["revelation_mystery"])
 
-        # 2. Punctuation Shock (High arousal markers)
+        has_conflict = stakes_escalated or status_inversion or info_withheld
+
+        if stakes_escalated:
+            accumulated_scene_stakes += 5.0
+        if status_inversion:
+            accumulated_scene_stakes += 6.0
+        if info_withheld:
+            accumulated_scene_stakes += 5.0
+
+        # Rapid decay if no ongoing conflict exists
+        if not has_conflict:
+            accumulated_scene_stakes = max(0.0, accumulated_scene_stakes * 0.70)
+
         arousal_markers = []
-        if "?" in b["text"] and "!" in b["text"]:
-            score += 12.0
-            arousal_markers.append("Interrogative Shock (?! )")
-        elif "!" in b["text"]:
-            score += 7.0
-            arousal_markers.append("Exclamation")
-        elif "..." in b["text"]:
-            score += 5.0
-            arousal_markers.append("Trailing Suspense (...)")
-
-        # 3. Conflict Rubric Flags
-        stakes_escalated = False
-        status_inversion = False
-        info_withheld = False
-
-        for kw in CONFLICT_KEYWORDS["high_conflict"]:
-            if kw in text_lower:
-                score += 14.0
-                stakes_escalated = True
-                accumulated_scene_stakes += 2.5
-                break
-
-        for kw in CONFLICT_KEYWORDS["power_reversal"]:
-            if kw in text_lower:
-                score += 15.0
-                status_inversion = True
-                accumulated_scene_stakes += 3.0
-                break
-
-        for kw in CONFLICT_KEYWORDS["revelation_mystery"]:
-            if kw in text_lower:
-                score += 14.0
-                info_withheld = True
-                accumulated_scene_stakes += 3.0
-                break
-
-        # 4. Turn-Taking Retort Detection: Look back across parentheticals/character cues
         is_punchline_retort = False
-        if i > 0 and b["type"] == "DIALOGUE" and word_count <= 14:
-            prev_dialogue_beat = None
-            for prev_k in range(i - 1, -1, -1):
-                if beats[prev_k]["type"] == "DIALOGUE":
-                    prev_dialogue_beat = beats[prev_k]
-                    break
-                elif beats[prev_k]["type"] in ["SCENE_HEADER", "ACTION"]:
-                    break
-            
-            if prev_dialogue_beat and "?" in prev_dialogue_beat["text"] and prev_dialogue_beat["character"] != b["character"]:
-                score += 18.0
-                is_punchline_retort = True
-                status_inversion = True
-                arousal_markers.append("Climactic Punchline Retort")
 
-        # Context multiplier: Past stakes elevate the current baseline
-        score += accumulated_scene_stakes
+        # --- BRANCH A: MUNDANE / SMALL TALK (Negative Control Zone) ---
+        if not has_conflict and accumulated_scene_stakes < 2.0:
+            target_score = 12.0
+            if "?" in b["text"]:
+                target_score += 4.0  # Minor transactional curiosity ripple
+                arousal_markers.append("Routine Query")
+            if 1 <= word_count <= 8 and b["type"] == "DIALOGUE":
+                pacing_velocity = "Casual Banter"
 
-        # Clamp between 15 and 99
-        score = max(15.0, min(99.0, score))
+        # --- BRANCH B: ACTIVE DRAMATIC CONFLICT (High Stakes Zone) ---
+        else:
+            target_score = 25.0 + accumulated_scene_stakes
+            if 1 <= word_count <= 12 and b["type"] == "DIALOGUE":
+                target_score += 10.0
+                pacing_velocity = "High (Staccato)"
+            elif word_count > 35:
+                target_score -= 6.0
+                pacing_velocity = "Low (Exposition)"
+
+            if "?" in b["text"] and "!" in b["text"]:
+                target_score += 14.0
+                arousal_markers.append("Interrogative Shock (?! )")
+            elif "!" in b["text"]:
+                target_score += 8.0
+                arousal_markers.append("Exclamation")
+            elif "..." in b["text"]:
+                target_score += 5.0
+                arousal_markers.append("Trailing Suspense (...)")
+
+            if stakes_escalated:
+                target_score += 16.0
+            if status_inversion:
+                target_score += 18.0
+            if info_withheld:
+                target_score += 16.0
+
+            # Turn-Taking Retort Detection: ONLY active during dramatic conflict
+            if i > 0 and b["type"] == "DIALOGUE" and word_count <= 14 and accumulated_scene_stakes >= 4.0:
+                prev_dialogue_beat = None
+                for prev_k in range(i - 1, -1, -1):
+                    if beats[prev_k]["type"] == "DIALOGUE":
+                        prev_dialogue_beat = beats[prev_k]
+                        break
+                    elif beats[prev_k]["type"] in ["SCENE_HEADER", "ACTION"]:
+                        break
+                
+                if prev_dialogue_beat and "?" in prev_dialogue_beat["text"] and prev_dialogue_beat["character"] != b["character"]:
+                    target_score += 22.0
+                    is_punchline_retort = True
+                    status_inversion = True
+                    arousal_markers.append("Climactic Punchline Retort")
+
+        # Clamp between 10 and 99
+        target_score = max(10.0, min(99.0, target_score))
         
-        # Momentum smoothing: 60% carried forward, 40% current beat
-        running_tension = 0.60 * running_tension + 0.40 * score
+        # Momentum smoothing: In mundane mode, snaps down quickly to baseline
+        alpha = 0.55 if accumulated_scene_stakes < 2.0 else 0.40
+        running_tension = (1.0 - alpha) * running_tension + alpha * target_score
 
         scored_beats.append({
             **b,
             "word_count": word_count,
             "scene_progress": round(scene_progress, 2),
-            "raw_tension": round(score, 1),
+            "raw_tension": round(target_score, 1),
             "smoothed_tension": round(running_tension, 1),
             "pacing_velocity": pacing_velocity,
             "arousal_markers": arousal_markers,
             "is_punchline_retort": is_punchline_retort,
+            "accumulated_stakes": round(accumulated_scene_stakes, 1),
             "rubric_flags": {
                 "stakes_escalated": stakes_escalated,
                 "status_inversion": status_inversion,
@@ -275,8 +290,11 @@ def calculate_tension_curve(beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Identifies top episode cut points and outputs an interpretable Hook Index (0-10)
-    with a fully transparent grading rubric breakdown.
-    Prioritizes terminal climactic status-inversion punchlines over premature complications.
+    using strict Absolute Anchors:
+    - Scores 1-3: Mundane daily activity, small talk, office chores, zero stakes.
+    - Scores 4-6: Mild friction, emotional arguments, no irreversible damage.
+    - Scores 7-8: Severe stakes raised, large financial loss, blackmail, physical danger.
+    - Scores 9-10: Peak biological urgency, complete status inversion, terminal mic-drop.
     """
     candidates = []
 
@@ -284,63 +302,73 @@ def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict
         if b["type"] in ["SCENE_HEADER", "PARENTHETICAL", "CHARACTER"] or len(b["text"]) < 4:
             continue
 
-        text_lower = b["text"].lower()
         raw_score = b["smoothed_tension"]
-
-        # Check for matched trigger hypothesis
-        matched_trigger = None
-        for trig in HOOK_TRIGGERS:
-            for kw in trig["keywords"]:
-                if kw in text_lower:
-                    matched_trigger = trig
-                    break
-            if matched_trigger:
-                break
-
         rubric = b.get("rubric_flags", {})
-        info_gap = rubric.get("information_withheld", False) or ("?" in b["text"])
+        info_gap = rubric.get("information_withheld", False)
         stakes = rubric.get("stakes_escalated", False)
         inversion = rubric.get("status_inversion", False)
         is_dialogue = b["type"] == "DIALOGUE"
         is_retort = b.get("is_punchline_retort", False)
         scene_prog = b.get("scene_progress", 0.5)
+        stakes_level = b.get("accumulated_stakes", 0.0)
 
-        tension_base = round(raw_score / 22.0, 2)
-
-        # Climax Positioning Logic
-        climax_bonus = 0.0
-        is_climax_apex = False
-        if is_retort:
-            climax_bonus = 2.8
-            is_climax_apex = True
-        elif scene_prog >= 0.75 and (inversion or stakes):
-            climax_bonus = 1.8
-            if scene_prog >= 0.85:
-                is_climax_apex = True
-        elif scene_prog < 0.35:
-            climax_bonus = -1.5  # Penalize premature scene cuts
-
-        rubric_breakdown = {
-            "Narrative Tension Base": min(4.5, tension_base),
-            "Information Gap Withheld": 1.8 if info_gap else 0.3,
-            "Stakes Escalation": 1.6 if stakes else 0.4,
-            "Status Inversion Dynamic": 2.2 if inversion else 0.2,
-            "Climax Mic-Drop Positioning": climax_bonus,
-            "Dialogue Delivery Penalty": 0.0 if is_dialogue else -1.8
-        }
-
-        hook_index = sum(rubric_breakdown.values())
-        hook_index = round(min(9.9, max(2.0, hook_index)), 1)
-
-        # Categorical Tier
-        if hook_index >= 8.5:
-            tier = "Tier 1: High Binge Impact"
-        elif hook_index >= 7.0:
+        # --- ABSOLUTE ANCHORED RUBRIC FORMULA ---
+        if stakes_level < 2.0 and not (stakes or inversion or info_gap):
+            # ANCHOR 1-3: MUNDANE / NEGATIVE CONTROL
+            hook_index = round(min(2.5, 0.5 + (raw_score / 20.0)), 1)
+            tier = "Tier 3: Low Binge Impact (Mundane Scene)"
+            is_climax_apex = False
+            rubric_breakdown = {
+                "Narrative Tension Base": round(raw_score / 25.0, 2),
+                "Information Gap Withheld": 0.3 if "?" in b["text"] else 0.1,
+                "Stakes Escalation": 0.0,
+                "Status Inversion Dynamic": 0.0,
+                "Climax Mic-Drop Positioning": 0.0,
+                "Mundane Office/Chore Baseline Cap": "Active (Scores 1-3)"
+            }
+        elif stakes_level < 8.0 and not is_retort:
+            # ANCHOR 4-6: MILD FRICTION
+            hook_index = round(min(6.5, 3.5 + (raw_score / 25.0)), 1)
             tier = "Tier 2: Moderate Binge Impact"
+            is_climax_apex = False
+            rubric_breakdown = {
+                "Narrative Tension Base": round(raw_score / 22.0, 2),
+                "Information Gap Withheld": 1.0 if info_gap else 0.4,
+                "Stakes Escalation": 1.2 if stakes else 0.3,
+                "Status Inversion Dynamic": 0.8 if inversion else 0.2,
+                "Climax Mic-Drop Positioning": 0.0,
+                "Dialogue Delivery": 0.0 if is_dialogue else -1.0
+            }
         else:
-            tier = "Tier 3: Low Binge Impact"
+            # ANCHOR 7-10: HIGH STAKES & CLIMACTIC STATUS INVERSION
+            climax_bonus = 2.8 if is_retort else (1.6 if scene_prog >= 0.75 else 0.0)
+            is_climax_apex = is_retort or (scene_prog >= 0.85)
+            tension_base = round(raw_score / 22.0, 2)
 
-        if hook_index >= 6.5:
+            rubric_breakdown = {
+                "Narrative Tension Base": min(4.5, tension_base),
+                "Information Gap Withheld": 1.8 if info_gap else 0.4,
+                "Stakes Escalation": 1.6 if stakes else 0.4,
+                "Status Inversion Dynamic": 2.2 if inversion else 0.2,
+                "Climax Mic-Drop Positioning": climax_bonus,
+                "Dialogue Delivery Penalty": 0.0 if is_dialogue else -1.8
+            }
+            hook_index = sum(v for v in rubric_breakdown.values() if isinstance(v, (int, float)))
+            hook_index = round(min(9.9, max(7.0, hook_index)), 1)
+            tier = "Tier 1: High Binge Impact" if hook_index >= 8.5 else "Tier 2: Moderate Binge Impact"
+
+        # Check matched trigger
+        matched_trigger = None
+        for trig in HOOK_TRIGGERS:
+            for kw in trig["keywords"]:
+                if re.search(r"\b" + re.escape(kw) + r"\b", b["text"], re.IGNORECASE):
+                    matched_trigger = trig
+                    break
+            if matched_trigger:
+                break
+
+        # Only register candidate cuts if hook_index meets minimal threshold (>= 7.0 for recommendation)
+        if hook_index >= 7.0:
             candidates.append({
                 "beat_index": b["index"],
                 "scene": b["scene"],
