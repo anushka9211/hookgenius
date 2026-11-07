@@ -14,30 +14,32 @@ CONFLICT_KEYWORDS = {
         "kill", "murder", "dead", "death", "die", "poison", "cyanide", "blood", "gun", 
         "destroy", "ruin", "revenge", "betray", "betrayal", "suicide", "crash", "explosion",
         "arrest", "police", "jail", "raid", "freeze", "bankrupt", "cheat", "affair", "mistress",
-        "slap", "strangle", "threat", "destroy", "choke", "drown"
+        "slap", "strangle", "threat", "destroy", "choke", "drown", "scraps", "divorce", "forfeited"
     ],
     "power_reversal": [
         "own", "bought", "empire", "heir", "fortune", "crore", "5000", "500", "assets",
         "foreclosure", "guarantor", "trust fund", "power of attorney", "deed", "shares",
-        "blackstone", "singhania", "oberoi", "raichand", "beggar", "street", "billionaire"
+        "blackstone", "singhania", "oberoi", "raichand", "beggar", "street", "billionaire",
+        "get out", "out of my house", "my house", "my company", "primary shareholder",
+        "sole heir", "founder", "founded", "ceo", "audit", "kneel", "fired", "slave", "me."
     ],
     "revelation_mystery": [
         "secret", "truth", "confession", "tape", "recording", "cctv", "camera", "real father",
         "real mother", "dna", "test", "fake", "faked", "impostor", "investigator", "evidence",
-        "proof", "document", "contract", "pregnant", "wife", "hospital", "alive"
+        "proof", "document", "contract", "pregnant", "wife", "hospital", "alive", "who is", "who..."
     ]
 }
 
 HOOK_TRIGGERS = [
     {
+        "type": "Status Inversion & Hierarchy Reversal",
+        "keywords": ["real father", "heir", "dna", "son", "mother", "sharda", "raichand", "impostor", "beggar", "primary shareholder", "out of my house", "get out", "me."],
+        "hypothesis": "Dismantles the power dynamic, creating a cognitive cliffhanger around the oppressor's reaction."
+    },
+    {
         "type": "Lethal Countdown & Physical Threat",
         "keywords": ["minute", "seconds", "cyanide", "poison", "heart", "die", "blood", "stop your heart"],
         "hypothesis": "Triggers immediate biological urgency. Listeners cannot disengage until survival is resolved."
-    },
-    {
-        "type": "Status Inversion & Hierarchy Reversal",
-        "keywords": ["real father", "heir", "dna", "son", "mother", "sharda", "raichand", "impostor", "beggar"],
-        "hypothesis": "Dismantles the power dynamic, creating a cognitive cliffhanger around the oppressor's reaction."
     },
     {
         "type": "Sudden Financial Liquidation",
@@ -55,10 +57,12 @@ HOOK_TRIGGERS = [
 def parse_script_into_beats(script_text: str) -> List[Dict[str, Any]]:
     """
     Parses a screenplay / script into narrative beats (scenes, dialogues, stage directions).
+    Robustly tracks active speaker across parentheticals and line breaks.
     """
     lines = script_text.strip().split("\n")
     beats = []
     current_scene = "SCENE 1"
+    current_speaker = None
     beat_index = 1
 
     for line in lines:
@@ -69,6 +73,7 @@ def parse_script_into_beats(script_text: str) -> List[Dict[str, Any]]:
         # Detect Scene Headers
         if stripped.upper().startswith("SCENE ") or stripped.upper().startswith("INT.") or stripped.upper().startswith("EXT."):
             current_scene = stripped
+            current_speaker = None
             beats.append({
                 "index": beat_index,
                 "type": "SCENE_HEADER",
@@ -79,11 +84,30 @@ def parse_script_into_beats(script_text: str) -> List[Dict[str, Any]]:
             beat_index += 1
             continue
 
+        # Skip Scene End tags
+        if stripped.upper() in ["[SCENE END]", "[END]", "CUT TO BLACK", "FADE OUT"]:
+            current_speaker = None
+            continue
+
+        # Detect Standalone Parentheticals e.g. "(Coldly)" or "(Voice steady)"
+        if stripped.startswith("(") and stripped.endswith(")"):
+            beats.append({
+                "index": beat_index,
+                "type": "PARENTHETICAL",
+                "character": current_speaker or "DIRECTION",
+                "text": stripped,
+                "scene": current_scene
+            })
+            beat_index += 1
+            continue
+
         # Detect Character Names (e.g. "VIKRAM" or "VIKRAM (Smirking)")
-        match_char = re.match(r"^([A-Z\s]{2,20})(?:\s*\((.*?)\))?$", stripped)
-        if match_char and not stripped.startswith("(") and len(stripped) < 30:
+        match_char = re.match(r"^([A-Z\s]{2,25})(?:\s*\((.*?)\))?$", stripped)
+        is_known_non_char = any(k in stripped.upper() for k in ["SCENE", "INT.", "EXT.", "DAY", "NIGHT", "STUDY"])
+        if match_char and not stripped.startswith("(") and len(stripped) < 30 and not is_known_non_char:
             char_name = match_char.group(1).strip()
             parenthetical = match_char.group(2) or ""
+            current_speaker = char_name
             beats.append({
                 "index": beat_index,
                 "type": "CHARACTER",
@@ -95,14 +119,24 @@ def parse_script_into_beats(script_text: str) -> List[Dict[str, Any]]:
             beat_index += 1
             continue
 
-        # Regular dialogue or action
-        last_beat = beats[-1] if beats else None
-        char = last_beat["character"] if (last_beat and last_beat["type"] == "CHARACTER") else "ACTION"
-        
+        # If current_speaker is active, this line is DIALOGUE
+        if current_speaker:
+            beats.append({
+                "index": beat_index,
+                "type": "DIALOGUE",
+                "character": current_speaker,
+                "text": stripped,
+                "scene": current_scene
+            })
+            beat_index += 1
+            current_speaker = None  # Reset speaker until next character cue
+            continue
+
+        # Otherwise it's ACTION / Stage direction
         beats.append({
             "index": beat_index,
-            "type": "DIALOGUE" if char != "ACTION" else "ACTION",
-            "character": char,
+            "type": "ACTION",
+            "character": "ACTION",
             "text": stripped,
             "scene": current_scene
         })
@@ -115,28 +149,41 @@ def calculate_tension_curve(beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     """
     Computes beat-by-beat tension using a rolling narrative context window,
     dialogue velocity, and semantic stakes density.
+    Also calculates relative scene arc progression for climax localization.
     """
     scored_beats = []
     running_tension = 35.0  # Baseline tension
     accumulated_scene_stakes = 0.0
     current_scene_tracker = ""
 
+    # Count total beats per scene to compute relative position
+    scene_beat_counts: Dict[str, int] = {}
     for b in beats:
+        scene_beat_counts[b["scene"]] = scene_beat_counts.get(b["scene"], 0) + 1
+
+    scene_current_indices: Dict[str, int] = {}
+
+    for i, b in enumerate(beats):
         text_lower = b["text"].lower()
         score = running_tension
 
+        # Scene progression tracking
+        scene_name = b["scene"]
+        scene_current_indices[scene_name] = scene_current_indices.get(scene_name, 0) + 1
+        scene_progress = scene_current_indices[scene_name] / max(1, scene_beat_counts.get(scene_name, 1))
+
         # Context Window: Reset or carry scene-level narrative momentum
-        if b["scene"] != current_scene_tracker:
-            current_scene_tracker = b["scene"]
+        if scene_name != current_scene_tracker:
+            current_scene_tracker = scene_name
             accumulated_scene_stakes = min(20.0, accumulated_scene_stakes * 0.5)
 
-        # 1. Pacing & Dialogue Staccato (Rapid turn-taking increases heart rate)
+        # 1. Pacing & Dialogue Staccato
         words = b["text"].split()
         word_count = len(words)
         pacing_velocity = "Moderate"
 
-        if 2 <= word_count <= 14 and b["type"] == "DIALOGUE":
-            score += 9.0
+        if 1 <= word_count <= 12 and b["type"] == "DIALOGUE":
+            score += 10.0
             pacing_velocity = "High (Staccato)"
         elif word_count > 35:
             score -= 6.0
@@ -168,9 +215,9 @@ def calculate_tension_curve(beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 
         for kw in CONFLICT_KEYWORDS["power_reversal"]:
             if kw in text_lower:
-                score += 13.0
+                score += 15.0
                 status_inversion = True
-                accumulated_scene_stakes += 2.0
+                accumulated_scene_stakes += 3.0
                 break
 
         for kw in CONFLICT_KEYWORDS["revelation_mystery"]:
@@ -180,22 +227,41 @@ def calculate_tension_curve(beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]
                 accumulated_scene_stakes += 3.0
                 break
 
+        # 4. Turn-Taking Retort Detection: Look back across parentheticals/character cues
+        is_punchline_retort = False
+        if i > 0 and b["type"] == "DIALOGUE" and word_count <= 14:
+            prev_dialogue_beat = None
+            for prev_k in range(i - 1, -1, -1):
+                if beats[prev_k]["type"] == "DIALOGUE":
+                    prev_dialogue_beat = beats[prev_k]
+                    break
+                elif beats[prev_k]["type"] in ["SCENE_HEADER", "ACTION"]:
+                    break
+            
+            if prev_dialogue_beat and "?" in prev_dialogue_beat["text"] and prev_dialogue_beat["character"] != b["character"]:
+                score += 18.0
+                is_punchline_retort = True
+                status_inversion = True
+                arousal_markers.append("Climactic Punchline Retort")
+
         # Context multiplier: Past stakes elevate the current baseline
         score += accumulated_scene_stakes
 
         # Clamp between 15 and 99
         score = max(15.0, min(99.0, score))
         
-        # Momentum smoothing: 65% carried forward, 35% current beat
-        running_tension = 0.65 * running_tension + 0.35 * score
+        # Momentum smoothing: 60% carried forward, 40% current beat
+        running_tension = 0.60 * running_tension + 0.40 * score
 
         scored_beats.append({
             **b,
             "word_count": word_count,
+            "scene_progress": round(scene_progress, 2),
             "raw_tension": round(score, 1),
             "smoothed_tension": round(running_tension, 1),
             "pacing_velocity": pacing_velocity,
             "arousal_markers": arousal_markers,
+            "is_punchline_retort": is_punchline_retort,
             "rubric_flags": {
                 "stakes_escalated": stakes_escalated,
                 "status_inversion": status_inversion,
@@ -210,11 +276,12 @@ def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict
     """
     Identifies top episode cut points and outputs an interpretable Hook Index (0-10)
     with a fully transparent grading rubric breakdown.
+    Prioritizes terminal climactic status-inversion punchlines over premature complications.
     """
     candidates = []
 
     for i, b in enumerate(scored_beats):
-        if b["type"] == "SCENE_HEADER" or len(b["text"]) < 10:
+        if b["type"] in ["SCENE_HEADER", "PARENTHETICAL", "CHARACTER"] or len(b["text"]) < 4:
             continue
 
         text_lower = b["text"].lower()
@@ -230,20 +297,36 @@ def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict
             if matched_trigger:
                 break
 
-        # Transparent Component Weights for Hook Index
         rubric = b.get("rubric_flags", {})
         info_gap = rubric.get("information_withheld", False) or ("?" in b["text"])
         stakes = rubric.get("stakes_escalated", False)
         inversion = rubric.get("status_inversion", False)
-        is_dialogue = b["character"] not in ["ACTION", "DIRECTION"]
+        is_dialogue = b["type"] == "DIALOGUE"
+        is_retort = b.get("is_punchline_retort", False)
+        scene_prog = b.get("scene_progress", 0.5)
 
-        # Calculate Rubric Breakdown (Max 10.0)
+        tension_base = round(raw_score / 22.0, 2)
+
+        # Climax Positioning Logic
+        climax_bonus = 0.0
+        is_climax_apex = False
+        if is_retort:
+            climax_bonus = 2.8
+            is_climax_apex = True
+        elif scene_prog >= 0.75 and (inversion or stakes):
+            climax_bonus = 1.8
+            if scene_prog >= 0.85:
+                is_climax_apex = True
+        elif scene_prog < 0.35:
+            climax_bonus = -1.5  # Penalize premature scene cuts
+
         rubric_breakdown = {
-            "Narrative Tension Base": round(raw_score / 20.0, 2),  # up to 5.0
-            "Information Gap Withheld": 2.2 if info_gap else 0.4,
-            "Stakes Escalation": 1.8 if stakes else 0.5,
-            "Status Inversion Dynamic": 1.5 if inversion else 0.2,
-            "Dialogue Delivery Penalty": 0.0 if is_dialogue else -1.5
+            "Narrative Tension Base": min(4.5, tension_base),
+            "Information Gap Withheld": 1.8 if info_gap else 0.3,
+            "Stakes Escalation": 1.6 if stakes else 0.4,
+            "Status Inversion Dynamic": 2.2 if inversion else 0.2,
+            "Climax Mic-Drop Positioning": climax_bonus,
+            "Dialogue Delivery Penalty": 0.0 if is_dialogue else -1.8
         }
 
         hook_index = sum(rubric_breakdown.values())
@@ -257,7 +340,7 @@ def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict
         else:
             tier = "Tier 3: Low Binge Impact"
 
-        if hook_index >= 7.0:
+        if hook_index >= 6.5:
             candidates.append({
                 "beat_index": b["index"],
                 "scene": b["scene"],
@@ -265,15 +348,17 @@ def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict
                 "line": b["text"],
                 "tension": round(raw_score, 1),
                 "hook_index": hook_index,
+                "is_climax_apex": is_climax_apex,
+                "scene_progress": scene_prog,
                 "tier": tier,
-                "trigger_type": matched_trigger["type"] if matched_trigger else "Confrontational Impasse",
-                "hypothesis": matched_trigger["hypothesis"] if matched_trigger else "Leaves a major character confrontation unresolved.",
+                "trigger_type": matched_trigger["type"] if matched_trigger else "Status Inversion Mic-Drop",
+                "hypothesis": matched_trigger["hypothesis"] if matched_trigger else "Leaves character power hierarchy completely flipped at peak emotional shock.",
                 "rubric_breakdown": rubric_breakdown,
                 "pacing": b["pacing_velocity"]
             })
 
-    # Sort descending by Hook Index
-    candidates.sort(key=lambda x: x["hook_index"], reverse=True)
+    # Sort descending prioritizing Hook Index, then Climax Apex, Scene Progress, Beat Index
+    candidates.sort(key=lambda x: (x["hook_index"], x["is_climax_apex"], x["scene_progress"], x["beat_index"]), reverse=True)
 
     # Pick distinct cuts (separated by at least 2 beats)
     unique_cuts = []
