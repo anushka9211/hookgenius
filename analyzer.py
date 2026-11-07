@@ -1,11 +1,11 @@
 """
-HookGenius Narrative Tension & Cliffhanger Analytics Engine v2.5
+HookGenius Narrative Tension & Cliffhanger Analytics Engine v2.6
 Designed for Kuku TV & Kuku FM Content Operations & Growth Engineering
 Features:
 - Regex Word-Boundary Conflict Matching (Zero substring false positives)
 - Absolute Anchored Scoring Rubric (Scores 1-3: Mundane, 4-6: Friction, 7-8: High Stakes, 9-10: Peak Inversion)
-- Turn-Taking Retort Detection with Stakes Gating
-- Native Negative Control / Flat Scene Support
+- Turn-Taking Retort Detection with Cross-Action Beat Scanning
+- Negative Control / Flat Scene Support
 """
 
 import re
@@ -18,15 +18,15 @@ RAW_CONFLICT_KEYWORDS = {
     "high_conflict": [
         "kill", "murder", "dead", "death", "die", "poison", "cyanide", "blood", "gun", 
         "destroy", "ruin", "revenge", "betray", "betrayal", "suicide", "crash", "explosion",
-        "arrest", "police", "jail", "raid", "freeze", "bankrupt", "cheat", "affair", "mistress",
+        "arrest", "police", "jail", "raid", "raided", "seized", "freeze", "bankrupt", "cheat", "affair", "mistress",
         "slap", "strangle", "threat", "destroy", "choke", "drown", "scraps", "divorce", "forfeited"
     ],
     "power_reversal": [
-        "own", "bought", "empire", "heir", "fortune", "crore", "5000", "500", "assets",
+        "own", "bought out", "bought this", "bought the", "empire", "heir", "fortune", "crore", "5000", "500", "assets",
         "foreclosure", "guarantor", "trust fund", "power of attorney", "deed", "shares",
         "blackstone", "singhania", "oberoi", "raichand", "beggar", "street", "billionaire",
-        "get out", "out of my house", "my house", "my company", "primary shareholder",
-        "sole heir", "founder", "founded", "ceo", "audit", "kneel", "fired", "slave"
+        "get out", "out of my house", "my house", "my company", "my penthouse", "leave my penthouse",
+        "primary shareholder", "sole heir", "sole surviving heir", "founder", "founded", "ceo", "audit", "kneel", "fired", "slave"
     ],
     "revelation_mystery": [
         "secret", "truth", "confession", "tape", "recording", "cctv", "camera", "real father",
@@ -44,7 +44,7 @@ COMPILED_CONFLICT_KEYWORDS = {
 HOOK_TRIGGERS = [
     {
         "type": "Status Inversion & Hierarchy Reversal",
-        "keywords": ["real father", "heir", "dna", "son", "mother", "sharda", "raichand", "impostor", "beggar", "primary shareholder", "out of my house", "get out"],
+        "keywords": ["real father", "heir", "dna", "son", "mother", "sharda", "raichand", "impostor", "beggar", "primary shareholder", "sole surviving heir", "out of my house", "get out", "leave my penthouse"],
         "hypothesis": "Dismantles the power dynamic, creating a cognitive cliffhanger around the oppressor's reaction."
     },
     {
@@ -54,7 +54,7 @@ HOOK_TRIGGERS = [
     },
     {
         "type": "Sudden Financial Liquidation",
-        "keywords": ["own", "bought", "freeze", "shares", "assets", "foreclosure", "crore", "bankrupt", "accounts are frozen"],
+        "keywords": ["own", "bought out", "freeze", "frozen", "shares", "assets", "foreclosure", "crore", "5000", "bankrupt", "accounts are frozen", "raided", "seized"],
         "hypothesis": "Instant stakes escalation. The antagonist's primary defense mechanism is dissolved in one sentence."
     },
     {
@@ -244,18 +244,18 @@ def calculate_tension_curve(beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             if info_withheld:
                 target_score += 16.0
 
-            # Turn-Taking Retort Detection: ONLY active during dramatic conflict
-            if i > 0 and b["type"] == "DIALOGUE" and word_count <= 14 and accumulated_scene_stakes >= 4.0:
+            # Turn-Taking Retort Detection: Scan back across parentheticals and staging action
+            if i > 0 and b["type"] == "DIALOGUE" and word_count <= 16 and accumulated_scene_stakes >= 4.0:
                 prev_dialogue_beat = None
-                for prev_k in range(i - 1, -1, -1):
+                for prev_k in range(i - 1, max(-1, i - 5), -1):
                     if beats[prev_k]["type"] == "DIALOGUE":
                         prev_dialogue_beat = beats[prev_k]
                         break
-                    elif beats[prev_k]["type"] in ["SCENE_HEADER", "ACTION"]:
+                    elif beats[prev_k]["type"] == "SCENE_HEADER":
                         break
                 
                 if prev_dialogue_beat and "?" in prev_dialogue_beat["text"] and prev_dialogue_beat["character"] != b["character"]:
-                    target_score += 22.0
+                    target_score += 24.0
                     is_punchline_retort = True
                     status_inversion = True
                     arousal_markers.append("Climactic Punchline Retort")
@@ -341,7 +341,7 @@ def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict
             }
         else:
             # ANCHOR 7-10: HIGH STAKES & CLIMACTIC STATUS INVERSION
-            climax_bonus = 2.8 if is_retort else (1.6 if scene_prog >= 0.75 else 0.0)
+            climax_bonus = 3.2 if is_retort else (1.6 if scene_prog >= 0.75 else 0.0)
             is_climax_apex = is_retort or (scene_prog >= 0.85)
             tension_base = round(raw_score / 22.0, 2)
 
