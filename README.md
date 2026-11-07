@@ -100,10 +100,12 @@ Displays real-time execution costs in the sidebar:
 * **Estimated Inference Cost:** ~₹0.036 per script (benchmarked on Gemini 3.8 Flash pricing)
 * **Execution Latency:** Sub-second (0.0s - 0.2s)
 
-### 6. A/B Testing Framework (Hook Doctor)
-Instead of a single subjective rewrite, HookGenius generates **two distinct psychological variations**:
+### 6. A/B Testing Framework (Hook Doctor) & Cut Recommendations
+Instead of a single subjective rewrite, HookGenius provides transparent rubric-graded cut points and generates **two distinct psychological variations**:
 * **Variant A (Loss Aversion & Urgent Countdown):** Immediate survival clock or asset freeze.
 * **Variant B (Status Inversion & Identity Reveal):** Power dynamic reversal and unmasked secrets.
+
+![Recommended Cuts & A/B Hook Doctor](docs/assets/cuts_and_doctor.png)
 
 ---
 
