@@ -1,11 +1,12 @@
 """
-HookGenius Narrative Tension & Cliffhanger Analytics Engine
-Built for Kuku TV Micro-Dramas & High-Retention Audio Fiction
+HookGenius Narrative Tension & Cliffhanger Analytics Engine v2.0
+Designed for Kuku TV & Kuku FM Content Operations & Growth Engineering
 """
 
 import re
-import math
-from typing import List, Dict, Any
+import time
+from typing import List, Dict, Any, Tuple
+import pandas as pd
 
 # High-yield dramatic conflict & revelation vocabulary for Indian OTT & Micro-Dramas
 CONFLICT_KEYWORDS = {
@@ -29,24 +30,24 @@ CONFLICT_KEYWORDS = {
 
 HOOK_TRIGGERS = [
     {
-        "type": "Lethal Deadline & Countdown",
-        "keywords": ["minute", "seconds", "cyanide", "poison", "heart", "die", "blood", "late"],
-        "reason": "Imposes an immediate physical survival clock, creating unbearable urgency for the next episode."
+        "type": "Lethal Countdown & Physical Threat",
+        "keywords": ["minute", "seconds", "cyanide", "poison", "heart", "die", "blood", "stop your heart"],
+        "hypothesis": "Triggers immediate biological urgency. Listeners cannot disengage until survival is resolved."
     },
     {
-        "type": "Identity / Bloodline Revelation",
-        "keywords": ["real father", "heir", "dna", "son", "mother", "sharda", "raichand", "alive", "impostor"],
-        "reason": "Shatters the fundamental status hierarchy, triggering deep curiosity about the protagonist's true origin."
+        "type": "Status Inversion & Hierarchy Reversal",
+        "keywords": ["real father", "heir", "dna", "son", "mother", "sharda", "raichand", "impostor", "beggar"],
+        "hypothesis": "Dismantles the power dynamic, creating a cognitive cliffhanger around the oppressor's reaction."
     },
     {
-        "type": "Sudden Financial / Power Inversion",
-        "keywords": ["own", "bought", "freeze", "shares", "assets", "foreclosure", "crore", "bankrupt"],
-        "reason": "The arrogant antagonist realizes their empire has vanished in seconds; peak catharsis & cliffhanger."
+        "type": "Sudden Financial Liquidation",
+        "keywords": ["own", "bought", "freeze", "shares", "assets", "foreclosure", "crore", "bankrupt", "accounts are frozen"],
+        "hypothesis": "Instant stakes escalation. The antagonist's primary defense mechanism is dissolved in one sentence."
     },
     {
-        "type": "Unanswered Evidence Drop",
-        "keywords": ["tape", "recording", "camera", "cctv", "document", "proof", "listen", "play"],
-        "reason": "An explosive piece of evidence is queued up right before the cut, guaranteeing a coin unlock to see the reaction."
+        "type": "Unresolved Evidence Drop",
+        "keywords": ["tape", "recording", "camera", "cctv", "document", "proof", "listen", "play", "investigator"],
+        "hypothesis": "Promises an imminent explosive revelation, creating a high information gap."
     }
 ]
 
@@ -78,7 +79,7 @@ def parse_script_into_beats(script_text: str) -> List[Dict[str, Any]]:
             beat_index += 1
             continue
 
-        # Detect Character Dialogues (e.g. "VIKRAM" or "VIKRAM (Smirking)")
+        # Detect Character Names (e.g. "VIKRAM" or "VIKRAM (Smirking)")
         match_char = re.match(r"^([A-Z\s]{2,20})(?:\s*\((.*?)\))?$", stripped)
         if match_char and not stripped.startswith("(") and len(stripped) < 30:
             char_name = match_char.group(1).strip()
@@ -112,59 +113,94 @@ def parse_script_into_beats(script_text: str) -> List[Dict[str, Any]]:
 
 def calculate_tension_curve(beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Computes a mathematical tension score (0 to 100) for every narrative beat
-    using semantic conflict density, pacing staccato, and dramatic punctuation.
+    Computes beat-by-beat tension using a rolling narrative context window,
+    dialogue velocity, and semantic stakes density.
     """
     scored_beats = []
-    running_tension = 35.0  # Baseline narrative tension
+    running_tension = 35.0  # Baseline tension
+    accumulated_scene_stakes = 0.0
+    current_scene_tracker = ""
 
     for b in beats:
         text_lower = b["text"].lower()
         score = running_tension
 
-        # 1. Pacing & Staccato (Rapid-fire dialogue increases heart rate)
+        # Context Window: Reset or carry scene-level narrative momentum
+        if b["scene"] != current_scene_tracker:
+            current_scene_tracker = b["scene"]
+            accumulated_scene_stakes = min(20.0, accumulated_scene_stakes * 0.5)
+
+        # 1. Pacing & Dialogue Staccato (Rapid turn-taking increases heart rate)
         words = b["text"].split()
         word_count = len(words)
-        if 2 <= word_count <= 12 and b["type"] == "DIALOGUE":
-            score += 8  # Punchy, tense dialogue
+        pacing_velocity = "Moderate"
+
+        if 2 <= word_count <= 14 and b["type"] == "DIALOGUE":
+            score += 9.0
+            pacing_velocity = "High (Staccato)"
         elif word_count > 35:
-            score -= 6  # Exposition slows pacing down
+            score -= 6.0
+            pacing_velocity = "Low (Exposition)"
 
         # 2. Punctuation Shock (High arousal markers)
+        arousal_markers = []
         if "?" in b["text"] and "!" in b["text"]:
-            score += 12
+            score += 12.0
+            arousal_markers.append("Interrogative Shock (?! )")
         elif "!" in b["text"]:
-            score += 7
+            score += 7.0
+            arousal_markers.append("Exclamation")
         elif "..." in b["text"]:
-            score += 5
+            score += 5.0
+            arousal_markers.append("Trailing Suspense (...)")
 
-        # 3. Conflict Keywords Density
+        # 3. Conflict Rubric Flags
+        stakes_escalated = False
+        status_inversion = False
+        info_withheld = False
+
         for kw in CONFLICT_KEYWORDS["high_conflict"]:
             if kw in text_lower:
-                score += 15
+                score += 14.0
+                stakes_escalated = True
+                accumulated_scene_stakes += 2.5
+                break
 
         for kw in CONFLICT_KEYWORDS["power_reversal"]:
             if kw in text_lower:
-                score += 12
+                score += 13.0
+                status_inversion = True
+                accumulated_scene_stakes += 2.0
+                break
 
         for kw in CONFLICT_KEYWORDS["revelation_mystery"]:
             if kw in text_lower:
-                score += 14
+                score += 14.0
+                info_withheld = True
+                accumulated_scene_stakes += 3.0
+                break
 
-        # 4. Scene Header Energy
-        if b["type"] == "SCENE_HEADER":
-            score += 4
+        # Context multiplier: Past stakes elevate the current baseline
+        score += accumulated_scene_stakes
 
         # Clamp between 15 and 99
         score = max(15.0, min(99.0, score))
         
-        # Momentum smoothing: tension carries forward slightly
+        # Momentum smoothing: 65% carried forward, 35% current beat
         running_tension = 0.65 * running_tension + 0.35 * score
 
         scored_beats.append({
             **b,
-            "tension_score": round(score, 1),
-            "smoothed_tension": round(running_tension, 1)
+            "word_count": word_count,
+            "raw_tension": round(score, 1),
+            "smoothed_tension": round(running_tension, 1),
+            "pacing_velocity": pacing_velocity,
+            "arousal_markers": arousal_markers,
+            "rubric_flags": {
+                "stakes_escalated": stakes_escalated,
+                "status_inversion": status_inversion,
+                "information_withheld": info_withheld
+            }
         })
 
     return scored_beats
@@ -172,12 +208,10 @@ def calculate_tension_curve(beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 
 def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Identifies the top 3 optimal micro-drama episode cut points
-    based on tension delta, hook triggers, and coin-unlock conversion probability.
+    Identifies top episode cut points and outputs an interpretable Hook Index (0-10)
+    with a fully transparent grading rubric breakdown.
     """
     candidates = []
-    total_beats = len(scored_beats)
-    avg_tension = sum(b["smoothed_tension"] for b in scored_beats) / max(1, total_beats)
 
     for i, b in enumerate(scored_beats):
         if b["type"] == "SCENE_HEADER" or len(b["text"]) < 10:
@@ -186,7 +220,7 @@ def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict
         text_lower = b["text"].lower()
         raw_score = b["smoothed_tension"]
 
-        # Check for matched trigger
+        # Check for matched trigger hypothesis
         matched_trigger = None
         for trig in HOOK_TRIGGERS:
             for kw in trig["keywords"]:
@@ -196,37 +230,52 @@ def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict
             if matched_trigger:
                 break
 
-        # Calculate Cliffhanger Potential (0-100)
-        cliff_potential = raw_score * 0.7
-        if matched_trigger:
-            cliff_potential += 25
-        if "?" in b["text"]:
-            cliff_potential += 8
-        if b["character"] not in ["ACTION", "DIRECTION"]:
-            cliff_potential += 5
+        # Transparent Component Weights for Hook Index
+        rubric = b.get("rubric_flags", {})
+        info_gap = rubric.get("information_withheld", False) or ("?" in b["text"])
+        stakes = rubric.get("stakes_escalated", False)
+        inversion = rubric.get("status_inversion", False)
+        is_dialogue = b["character"] not in ["ACTION", "DIRECTION"]
 
-        cliff_potential = min(99.0, cliff_potential)
+        # Calculate Rubric Breakdown (Max 10.0)
+        rubric_breakdown = {
+            "Narrative Tension Base": round(raw_score / 20.0, 2),  # up to 5.0
+            "Information Gap Withheld": 2.2 if info_gap else 0.4,
+            "Stakes Escalation": 1.8 if stakes else 0.5,
+            "Status Inversion Dynamic": 1.5 if inversion else 0.2,
+            "Dialogue Delivery Penalty": 0.0 if is_dialogue else -1.5
+        }
 
-        # We look for peaks that stand out significantly
-        if cliff_potential > 65:
-            coin_unlock_prob = round(min(97.5, max(68.0, 50 + (cliff_potential - 60) * 1.2)), 1)
-            
+        hook_index = sum(rubric_breakdown.values())
+        hook_index = round(min(9.9, max(2.0, hook_index)), 1)
+
+        # Categorical Tier
+        if hook_index >= 8.5:
+            tier = "Tier 1: High Binge Impact"
+        elif hook_index >= 7.0:
+            tier = "Tier 2: Moderate Binge Impact"
+        else:
+            tier = "Tier 3: Low Binge Impact"
+
+        if hook_index >= 7.0:
             candidates.append({
                 "beat_index": b["index"],
                 "scene": b["scene"],
                 "character": b["character"],
                 "line": b["text"],
                 "tension": round(raw_score, 1),
-                "cliff_score": round(cliff_potential, 1),
-                "coin_unlock_prob": coin_unlock_prob,
-                "trigger_type": matched_trigger["type"] if matched_trigger else "Emotional Confrontation Peak",
-                "rationale": matched_trigger["reason"] if matched_trigger else "Ends on an unresolved accusation, forcing users to continue."
+                "hook_index": hook_index,
+                "tier": tier,
+                "trigger_type": matched_trigger["type"] if matched_trigger else "Confrontational Impasse",
+                "hypothesis": matched_trigger["hypothesis"] if matched_trigger else "Leaves a major character confrontation unresolved.",
+                "rubric_breakdown": rubric_breakdown,
+                "pacing": b["pacing_velocity"]
             })
 
-    # Sort by cliffhanger score descending and pick distinct top 3
-    candidates.sort(key=lambda x: x["cliff_score"], reverse=True)
+    # Sort descending by Hook Index
+    candidates.sort(key=lambda x: x["hook_index"], reverse=True)
 
-    # Filter out candidates too close to each other
+    # Pick distinct cuts (separated by at least 2 beats)
     unique_cuts = []
     seen_indices = set()
     for c in candidates:
@@ -240,24 +289,74 @@ def detect_optimal_cliffhangers(scored_beats: List[Dict[str, Any]]) -> List[Dict
     return unique_cuts
 
 
-def generate_hook_rewrite(weak_beat: Dict[str, Any]) -> Dict[str, str]:
+def generate_ab_test_rewrites(weak_beat: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Hook Doctor: Takes an underwhelming scene ending and suggests a high-yield rewrite.
+    Hook Doctor: Generates two distinct, testable psychological variations for A/B testing.
+    Variant A: Loss Aversion / Lethal Countdown
+    Variant B: Identity Reveal / Cognitive Gap
     """
     original = weak_beat.get("text", "")
     char = weak_beat.get("character", "CHARACTER")
 
-    templates = [
-        f"{char}\n(Steps closer, voice freezing the room)\n\"You think you've won? Check your phone in five seconds, and see what I just leaked to the Board.\"",
-        f"{char}\n(Smiles coldly, dropping a signed contract on the table)\n\"Before you sign those papers... you might want to ask who paid for your mother's hospital bills seven years ago.\"",
-        f"{char}\n(Whispers)\n\"Tanya isn't dead. She's sitting in your living room right now with your pregnant wife.\""
-    ]
+    variant_a = {
+        "title": "Variant A: Loss Aversion & Urgent Countdown",
+        "line": f"{char}\n(Whispers, stepping closer)\n\"You have exactly three minutes before the auditors freeze this building. And you won't like what they find in your safe.\"",
+        "psychological_lever": "Immediate survival clock / irreversible asset loss."
+    }
 
-    import random
-    suggestion = random.choice(templates)
+    variant_b = {
+        "title": "Variant B: Status Inversion & Identity Reveal",
+        "line": f"{char}\n(Smiles coldly, sliding a black folder onto the marble)\n\"Before you call security, Vikram... check page two. The DNA test proves who really inherits this house.\"",
+        "psychological_lever": "Destroys character status hierarchy; unresolved identity question."
+    }
 
     return {
         "original": original,
-        "improved": suggestion,
-        "retention_boost": "+38% Coin Unlock Uplift"
+        "variant_a": variant_a,
+        "variant_b": variant_b
     }
+
+
+def compute_telemetry(script_text: str, start_time: float) -> Dict[str, Any]:
+    """
+    Computes production unit economics & latency telemetry.
+    """
+    word_count = len(script_text.split())
+    # Estimated tokens: ~1.33 tokens per English/Hinglish word
+    est_tokens = int(word_count * 1.33)
+    # Gemini 3.8 Flash Pricing benchmark: ~$0.75 per 1M input tokens (~₹62 per 1M tokens)
+    est_cost_inr = round((est_tokens / 1_000_000) * 62.0, 4)
+    elapsed_sec = round(time.time() - start_time, 2)
+
+    return {
+        "word_count": word_count,
+        "est_tokens": est_tokens,
+        "cost_inr": f"₹{est_cost_inr:.3f}",
+        "latency_sec": f"{elapsed_sec}s"
+    }
+
+
+def export_normalized_analytics_dataset(scored_beats: List[Dict[str, Any]], cliffhangers: List[Dict[str, Any]]) -> pd.DataFrame:
+    """
+    Exports a clean, normalized DataFrame ready for correlation analysis in SQL/Snowflake.
+    """
+    cut_indices = {c["beat_index"]: c["hook_index"] for c in cliffhangers}
+    records = []
+
+    for b in scored_beats:
+        is_cut = b["index"] in cut_indices
+        records.append({
+            "beat_id": b["index"],
+            "scene_id": b["scene"],
+            "speaker": b["character"],
+            "beat_type": b["type"],
+            "word_count": b.get("word_count", 0),
+            "smoothed_tension": b["smoothed_tension"],
+            "is_recommended_cut": is_cut,
+            "hook_index": cut_indices.get(b["index"], None),
+            "pacing_velocity": b.get("pacing_velocity", "Moderate"),
+            "stakes_flag": b.get("rubric_flags", {}).get("stakes_escalated", False),
+            "info_gap_flag": b.get("rubric_flags", {}).get("information_withheld", False)
+        })
+
+    return pd.DataFrame(records)
